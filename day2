@@ -1,0 +1,13 @@
+// find highest marks from an array using loop
+
+var marks = [56, 78, 92, 45, 88, 99, 67];
+
+var highest = marks[0];
+
+for (var i = 1; i < marks.length; i++) {
+    if (marks[i] > highest) {
+        highest = marks[i];
+    }
+}
+
+console.log("The highest marks are: " + highest);
