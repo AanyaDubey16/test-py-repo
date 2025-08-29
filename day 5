@@ -1,0 +1,107 @@
+// server.js
+const express = require("express");
+const cors = require("cors");
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// --- Middleware ---
+app.use(cors());             // allow cross-origin requests (handy for frontends)
+app.use(express.json());     // parse JSON bodies
+
+// --- In-memory "database" ---
+let nextId = 1;
+const todos = []; // { id, text, done }
+
+// --- Routes ---
+
+// Root: quick help
+app.get("/", (req, res) => {
+  res.json({
+    message: "Welcome to the Express.js starter 🚀",
+    endpoints: {
+      health: "GET /health",
+      listTodos: "GET /api/todos",
+      addTodo: "POST /api/todos { text }",
+      getTodo: "GET /api/todos/:id",
+      updateTodo: "PATCH /api/todos/:id { text?, done? }",
+      deleteTodo: "DELETE /api/todos/:id"
+    }
+  });
+});
+
+// Health check
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "ok", time: new Date().toISOString() });
+});
+
+// List all todos
+app.get("/api/todos", (req, res) => {
+  res.json(todos);
+});
+
+// Create a todo
+app.post("/api/todos", (req, res, next) => {
+  try {
+    const { text } = req.body || {};
+    if (!text || typeof text !== "string") {
+      return res.status(400).json({ error: "Field 'text' is required (string)." });
+    }
+    const todo = { id: nextId++, text: text.trim(), done: false };
+    todos.push(todo);
+    res.status(201).json(todo);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Read one todo
+app.get("/api/todos/:id", (req, res) => {
+  const id = Number(req.params.id);
+  const todo = todos.find(t => t.id === id);
+  if (!todo) return res.status(404).json({ error: "Not found" });
+  res.json(todo);
+});
+
+// Update a todo (partial)
+app.patch("/api/todos/:id", (req, res) => {
+  const id = Number(req.params.id);
+  const todo = todos.find(t => t.id === id);
+  if (!todo) return res.status(404).json({ error: "Not found" });
+
+  const { text, done } = req.body || {};
+  if (text !== undefined) {
+    if (typeof text !== "string") return res.status(400).json({ error: "'text' must be a string" });
+    todo.text = text.trim();
+  }
+  if (done !== undefined) {
+    if (typeof done !== "boolean") return res.status(400).json({ error: "'done' must be a boolean" });
+    todo.done = done;
+  }
+  res.json(todo);
+});
+
+// Delete a todo
+app.delete("/api/todos/:id", (req, res) => {
+  const id = Number(req.params.id);
+  const idx = todos.findIndex(t => t.id === id);
+  if (idx === -1) return res.status(404).json({ error: "Not found" });
+  const [removed] = todos.splice(idx, 1);
+  res.json(removed);
+});
+
+// 404 handler (for unmatched routes)
+app.use((req, res) => {
+  res.status(404).json({ error: "Route not found" });
+});
+
+// Error handler
+app.use((err, req, res, _next) => {
+  console.error(err);
+  res.status(500).json({ error: "Internal server error" });
+});
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`✅ Server running at http://localhost:${PORT}`);
+});
