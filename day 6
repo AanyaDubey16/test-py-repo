@@ -1,0 +1,22 @@
+function App() {
+  return (
+    <div style={{ textAlign: "center", marginTop: "50px" }}>
+      <h1>Hello, React JSX!</h1>
+      <p>This is a simple React component using JSX.</p>
+
+      <button
+        style={{
+          padding: "10px 20px",
+          backgroundColor: "#4CAF50",
+          color: "white",
+          border: "none",
+          borderRadius: "8px",
+          cursor: "pointer",
+        }}
+        onClick={() => alert("Button clicked! 🎉")}
+      >
+        Click Me
+      </button>
+    </div>
+  );
+}
