@@ -1,0 +1,85 @@
+import { useState } from "react";
+
+function Counter() {
+  const [count, setCount] = useState(0); // local state
+
+  return (
+    <div className="p-4 text-center">
+      <h1 className="text-xl">Count: {count}</h1>
+      <button 
+        onClick={() => setCount(count + 1)} 
+        className="px-4 py-2 bg-blue-500 text-white rounded-lg mt-2"
+      >
+        Increment
+      </button>
+    </div>
+  );
+
+
+// store.js
+import { createContext, useContext, useState } from "react";
+
+const AppContext = createContext();
+
+export function AppProvider({ children }) {
+  const [user, setUser] = useState("Mansi");
+
+  return (
+    <AppContext.Provider value={{ user, setUser }}>
+      {children}
+    </AppContext.Provider>
+  );
+}
+
+export function useAppContext() {
+  return useContext(AppContext);
+}
+
+// App.jsx
+import { AppProvider, useAppContext } from "./store";
+
+function Profile() {
+  const { user, setUser } = useAppContext();
+  return (
+    <div className="p-4">
+      <h2 className="text-lg">Hello, {user}!</h2>
+      <button 
+        onClick={() => setUser("Yadav")} 
+        className="px-4 py-2 bg-green-500 text-white rounded-lg mt-2"
+      >
+        Change User
+      </button>
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AppProvider>
+      <Profile />
+    </AppProvider>
+  );
+}
+
+
+import create from "zustand";
+
+const useStore = create((set) => ({
+  count: 0,
+  increase: () => set((state) => ({ count: state.count + 1 })),
+}));
+
+function Counter() {
+  const { count, increase } = useStore();
+  return (
+    <div className="p-4 text-center">
+      <h1 className="text-xl">Count: {count}</h1>
+      <button 
+        onClick={increase} 
+        className="px-4 py-2 bg-purple-500 text-white rounded-lg mt-2"
+      >
+        Increment
+      </button>
+    </div>
+  );
+}
