@@ -1,0 +1,108 @@
+import React, { useEffect, useState } from "react";
+
+function App() {
+  const [students, setStudents] = useState([]);
+  const [form, setForm] = useState({ name: "", age: "", course: "" });
+
+  // Fetch students from backend
+  useEffect(() => {
+    fetch("http://localhost:5000/students")
+      .then((res) => res.json())
+      .then((data) => setStudents(data))
+      .catch((err) => console.error("Error:", err));
+  }, []);
+
+  // Handle form input
+  const handleChange = (e) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
+  };
+
+  // Add new student
+  const addStudent = (e) => {
+    e.preventDefault();
+    fetch("http://localhost:5000/students", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(form),
+    })
+      .then((res) => res.json())
+      .then((newStudent) => setStudents([...students, newStudent]))
+      .catch((err) => console.error("Error:", err));
+  };
+
+  return (
+    <div style={{ margin: "20px" }}>
+      <h1>🎓 Student Directory</h1>
+
+      {/* Form */}
+      <form onSubmit={addStudent} style={{ marginBottom: "20px" }}>
+        <input
+          name="name"
+          placeholder="Name"
+          value={form.name}
+          onChange={handleChange}
+          required
+        />
+        <input
+          name="age"
+          placeholder="Age"
+          type="number"
+          value={form.age}
+          onChange={handleChange}
+          required
+        />
+        <input
+          name="course"
+          placeholder="Course"
+          value={form.course}
+          onChange={handleChange}
+          required
+        />
+        <button type="submit">Add Student</button>
+      </form>
+
+      {/* Student List */}
+      <ul>
+        {students.map((s) => (
+          <li key={s.id}>
+            <b>{s.name}</b> (Age: {s.age}) - {s.course}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export default App;
+
+
+// backend/server.js
+const express = require("express");
+const cors = require("cors");
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// Sample student data
+let students = [
+  { id: 1, name: "Aanya Dubey", age: 19, course: "Computer Science" },
+  { id: 2, name: "Rohit Sharma", age: 20, course: "Mechanical" },
+  { id: 3, name: "Poorva Singh", age: 18, course: "Electronics" },
+];
+
+// Get all students
+app.get("/students", (req, res) => {
+  res.json(students);
+});
+
+// Add a student
+app.post("/students", (req, res) => {
+  const { name, age, course } = req.body;
+  const newStudent = { id: students.length + 1, name, age, course };
+  students.push(newStudent);
+  res.json(newStudent);
+});
+
+const PORT = 5000;
+app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
