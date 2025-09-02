@@ -1,0 +1,46 @@
+const express = require("express");
+const mongoose = require("mongoose");
+
+const app = express();
+app.use(express.json()); // to read json from body
+
+// connect database
+mongoose.connect("mongodb://127.0.0.1:27017/notesdb")
+.then(() => console.log("db connected"))
+.catch(err => console.log(err));
+
+// schema
+const noteSchema = new mongoose.Schema({
+    title: String,
+    content: String
+});
+
+const Note = mongoose.model("Note", noteSchema);
+
+// add note
+app.post("/addnote", async (req, res) => {
+    try {
+        const note = new Note({
+            title: req.body.title,
+            content: req.body.content
+        });
+        await note.save();
+        res.send("note saved");
+    } catch (err) {
+        res.send("error saving note");
+    }
+});
+
+// get all notes
+app.get("/notes", async (req, res) => {
+    try {
+        const notes = await Note.find();
+        res.json(notes);
+    } catch (err) {
+        res.send("error getting notes");
+    }
+});
+
+app.listen(3000, () => {
+    console.log("server running on http://localhost:3000");
+});
