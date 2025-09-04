@@ -1,0 +1,302 @@
+import React, { useEffect, useMemo, useState } from "react"; import { ShoppingCart, Search, Minus, Plus, Trash2, CheckCircle2 } from "lucide-react"; import { Button } from "@/components/ui/button"; import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"; import { Input } from "@/components/ui/input"; import { Label } from "@/components/ui/label"; import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"; import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"; import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"; import { Badge } from "@/components/ui/badge"; import { Separator } from "@/components/ui/separator"; import { Toaster } from "@/components/ui/toaster"; import { useToast } from "@/components/ui/use-toast"; import { Checkbox } from "@/components/ui/checkbox";
+
+/**
+
+Complete Online Store (Catalog + Cart + Simulated Payments)
+
+Product catalog with search, filters, sorting
+
+
+Cart with quantity controls and persistent storage
+
+
+Checkout dialog with address form and mock payment (Luhn-validated card)
+
+
+Order confirmation receipt with printable view
+
+
+Notes:
+
+This is a front-end demo. Swap simulatePayment with a real gateway call (Stripe/Razorpay) from your backend.
+
+
+Tailwind + shadcn/ui are assumed available in this environment. */
+
+
+
+// ----------------------- Types & Seed Data ----------------------- const CATEGORIES = ["All", "Electronics", "Apparel", "Home", "Books"] as const;
+
+type Category = typeof CATEGORIES[number];
+
+type Product = { id: string; name: string; price: number; // in INR category: Category; description: string; image: string; rating: number; // 0–5 tags?: string[]; };
+
+const formatINR = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(n);
+
+const PRODUCTS: Product[] = [ { id: "p1", name: "Noise-Cancel Headphones X1", price: 6499, category: "Electronics", description: "Wireless over‑ear headphones with ANC and 30‑hr battery.", image: "https://images.unsplash.com/photo-1518449007437-067f3e6f3e2e?q=80&w=1200&auto=format&fit=crop", rating: 4.5, tags: ["wireless", "bluetooth", "anc"], }, { id: "p2", name: "Organic Cotton Tee", price: 799, category: "Apparel", description: "Soft, breathable, and sustainably made.", image: "https://images.unsplash.com/photo-1520975856166-7b05b95e8b60?q=80&w=1200&auto=format&fit=crop", rating: 4.2, tags: ["unisex", "casual"], }, { id: "p3", name: "Smart LED Lamp", price: 1899, category: "Home", description: "RGB smart lamp with app control and scenes.", image: "https://images.unsplash.com/photo-1524758631624-e2822e304c36?q=80&w=1200&auto=format&fit=crop", rating: 4.1, tags: ["smart", "rgb"], }, { id: "p4", name: "Clean Architecture (Book)", price: 1299, category: "Books", description: "A craftsman’s guide to software structure and design.", image: "https://images.unsplash.com/photo-1495446815901-a7297e633e8d?q=80&w=1200&auto=format&fit=crop", rating: 4.7, tags: ["software", "design"], }, { id: "p5", name: "Stainless Steel Kettle", price: 2199, category: "Home", description: "1.7L electric kettle with auto shut‑off.", image: "https://images.unsplash.com/photo-1513002749550-c59d786b8e6c?q=80&w=1200&auto=format&fit=crop", rating: 4.0, tags: ["kitchen"], }, ];
+
+// ----------------------- Utils ----------------------- function luhnCheck(cardNumber: string) { const sanitized = cardNumber.replace(/\s+/g, ""); if (!/^\d{13,19}$/.test(sanitized)) return false; let sum = 0; let shouldDouble = false; for (let i = sanitized.length - 1; i >= 0; i--) { let digit = parseInt(sanitized.charAt(i), 10); if (shouldDouble) { digit *= 2; if (digit > 9) digit -= 9; } sum += digit; shouldDouble = !shouldDouble; } return sum % 10 === 0; }
+
+function uid(prefix = "ord") { return ${prefix}_${Math.random().toString(36).slice(2, 8)}-${Date.now().toString(36)}; }
+
+// Simulated payment: resolves in ~1s if Luhn-valid async function simulatePayment(amount: number, card: string) { await new Promise((r) => setTimeout(r, 1000)); if (!luhnCheck(card)) throw new Error("Card declined: invalid number"); return { status: "succeeded" as const, txnId: uid("txn") }; }
+
+// ----------------------- Cart Store -----------------------
+
+type CartLine = { product: Product; qty: number };
+
+type CartState = Record<string, CartLine>; // key by product.id
+
+function loadCart(): CartState { try { const raw = localStorage.getItem("cart:v1"); return raw ? JSON.parse(raw) : {}; } catch { return {}; } }
+
+function saveCart(state: CartState) { try { localStorage.setItem("cart:v1", JSON.stringify(state)); } catch {} }
+
+// ----------------------- Component ----------------------- export default function App() { const { toast } = useToast();
+
+const [query, setQuery] = useState(""); const [category, setCategory] = useState<Category>("All"); const [sort, setSort] = useState<"popular" | "price-asc" | "price-desc">("popular"); const [onlyInStock, setOnlyInStock] = useState(true);
+
+const [cartOpen, setCartOpen] = useState(false); const [cart, setCart] = useState<CartState>({});
+
+const [checkoutOpen, setCheckoutOpen] = useState(false); const [placing, setPlacing] = useState(false); const [order, setOrder] = useState<null | { orderId: string; txnId: string; name: string; email: string; address: string; amount: number; items: CartLine[]; }>(null);
+
+useEffect(() => setCart(loadCart()), []); useEffect(() => saveCart(cart), [cart]);
+
+const catalog = useMemo(() => { let list = PRODUCTS.slice(); if (category !== "All") list = list.filter((p) => p.category === category); if (onlyInStock) list = list.filter(() => true); // Placeholder for stock flag if (query.trim()) { const q = query.toLowerCase(); list = list.filter((p) => [p.name, p.description, p.tags?.join(" ")].join(" ").toLowerCase().includes(q) ); } if (sort === "price-asc") list.sort((a, b) => a.price - b.price); if (sort === "price-desc") list.sort((a, b) => b.price - a.price); return list; }, [query, category, sort, onlyInStock]);
+
+const cartCount = Object.values(cart).reduce((n, l) => n + l.qty, 0); const cartSubtotal = Object.values(cart).reduce((s, l) => s + l.qty * l.product.price, 0); const shipping = cartSubtotal > 5000 || cartSubtotal === 0 ? 0 : 99; const tax = Math.round(cartSubtotal * 0.18); const payable = cartSubtotal + shipping + tax;
+
+function addToCart(p: Product) { setCart((prev) => { const cur = prev[p.id]?.qty ?? 0; const next: CartState = { ...prev, [p.id]: { product: p, qty: cur + 1 } }; return next; }); toast({ title: "Added to cart", description: p.name }); }
+
+function inc(p: Product) { setCart((prev) => ({ ...prev, [p.id]: { product: p, qty: (prev[p.id]?.qty ?? 0) + 1 } })); }
+
+function dec(p: Product) { setCart((prev) => { const cur = prev[p.id]?.qty ?? 0; if (cur <= 1) { const { [p.id]: _, ...rest } = prev; return rest; } return { ...prev, [p.id]: { product: p, qty: cur - 1 } }; }); }
+
+function removeLine(p: Product) { setCart((prev) => { const { [p.id]: _, ...rest } = prev; return rest; }); }
+
+// ----------------------- Checkout ----------------------- const [name, setName] = useState(""); const [email, setEmail] = useState(""); const [address, setAddress] = useState(""); const [card, setCard] = useState(""); const [agree, setAgree] = useState(false);
+
+async function placeOrder() { if (!cartCount) return toast({ variant: "destructive", title: "Your cart is empty" }); if (!name || !email || !address) return toast({ variant: "destructive", title: "Fill shipping info" }); if (!agree) return toast({ variant: "destructive", title: "Please accept terms" });
+
+setPlacing(true);
+try {
+  const pay = await simulatePayment(payable, card);
+  const orderId = uid("order");
+  const items = Object.values(cart);
+  setOrder({ orderId, txnId: pay.txnId, name, email, address, amount: payable, items });
+  setCart({});
+  setCheckoutOpen(false);
+  toast({ title: "Payment successful", description: `Order ${orderId} placed` });
+} catch (err: any) {
+  toast({ variant: "destructive", title: "Payment failed", description: err?.message || "Try another card" });
+} finally {
+  setPlacing(false);
+}
+
+}
+
+function printReceipt() { window.print(); }
+
+return ( <div className="min-h-screen bg-gradient-to-b from-white to-slate-50"> <Toaster />
+
+{/* Header */}
+  <header className="sticky top-0 z-30 backdrop-blur bg-white/70 border-b">
+    <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
+      <div className="font-bold text-2xl tracking-tight">ShopSwift</div>
+      <div className="ml-auto flex items-center gap-2">
+        <div className="hidden md:flex items-center gap-2">
+          <div className="relative w-64">
+            <Search className="absolute left-2 top-2.5 h-4 w-4" />
+            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search products" className="pl-8" />
+          </div>
+          <Select value={category} onValueChange={(v) => setCategory(v as Category)}>
+            <SelectTrigger className="w-40"><SelectValue placeholder="Category" /></SelectTrigger>
+            <SelectContent>
+              {CATEGORIES.map((c) => (<SelectItem key={c} value={c}>{c}</SelectItem>))}
+            </SelectContent>
+          </Select>
+          <Select value={sort} onValueChange={(v) => setSort(v as any)}>
+            <SelectTrigger className="w-40"><SelectValue placeholder="Sort by" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="popular">Featured</SelectItem>
+              <SelectItem value="price-asc">Price: Low to High</SelectItem>
+              <SelectItem value="price-desc">Price: High to Low</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <Sheet open={cartOpen} onOpenChange={setCartOpen}>
+          <SheetTrigger asChild>
+            <Button variant="outline" size="sm" className="gap-2">
+              <ShoppingCart className="h-4 w-4" />
+              <span className="font-semibold">{cartCount}</span>
+            </Button>
+          </SheetTrigger>
+          <SheetContent className="flex flex-col">
+            <SheetHeader>
+              <SheetTitle>Your Cart</SheetTitle>
+            </SheetHeader>
+            <div className="mt-4 space-y-4 flex-1 overflow-auto pr-1">
+              {cartCount === 0 && (
+                <p className="text-sm text-slate-500">Your cart is empty.</p>
+              )}
+              {Object.values(cart).map(({ product, qty }) => (
+                <div key={product.id} className="flex gap-3 items-center">
+                  <img src={product.image} alt={product.name} className="h-16 w-16 object-cover rounded-xl" />
+                  <div className="flex-1">
+                    <div className="font-medium leading-tight">{product.name}</div>
+                    <div className="text-xs text-slate-500">{formatINR(product.price)}</div>
+                    <div className="mt-1 flex items-center gap-2">
+                      <Button variant="outline" size="icon" onClick={() => dec(product)} className="h-7 w-7"><Minus className="h-4 w-4" /></Button>
+                      <span className="w-6 text-center text-sm">{qty}</span>
+                      <Button variant="outline" size="icon" onClick={() => inc(product)} className="h-7 w-7"><Plus className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" onClick={() => removeLine(product)} className="ml-1 h-7 w-7"><Trash2 className="h-4 w-4" /></Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 space-y-2">
+              <div className="flex justify-between text-sm"><span>Subtotal</span><span>{formatINR(cartSubtotal)}</span></div>
+              <div className="flex justify-between text-sm"><span>Shipping</span><span>{shipping ? formatINR(shipping) : "Free"}</span></div>
+              <div className="flex justify-between text-sm"><span>GST (18%)</span><span>{formatINR(tax)}</span></div>
+              <Separator className="my-2" />
+              <div className="flex justify-between font-semibold"><span>Total</span><span>{formatINR(payable)}</span></div>
+              <div className="pt-2">
+                <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
+                  <DialogTrigger asChild>
+                    <Button className="w-full" disabled={!cartCount}>Checkout</Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-lg">
+                    <DialogHeader>
+                      <DialogTitle>Checkout</DialogTitle>
+                    </DialogHeader>
+                    <div className="grid gap-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="name">Full Name</Label>
+                        <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Aanya Dubey" />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="email">Email</Label>
+                        <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="addr">Shipping Address</Label>
+                        <Input id="addr" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="House no, Street, City, PIN" />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="card">Card Number (demo)</Label>
+                        <Input id="card" value={card} onChange={(e) => setCard(e.target.value)} placeholder="4111 1111 1111 1111" />
+                        <p className="text-xs text-slate-500">Uses Luhn check only. No real payment is made.</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Checkbox id="terms" checked={agree} onCheckedChange={(v) => setAgree(Boolean(v))} />
+                        <Label htmlFor="terms" className="text-sm text-slate-600">I agree to the Terms & Privacy Policy</Label>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setCheckoutOpen(false)}>Cancel</Button>
+                      <Button onClick={placeOrder} disabled={placing}>{placing ? "Processing..." : `Pay ${formatINR(payable)}`}</Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </div>
+          </SheetContent>
+        </Sheet>
+      </div>
+    </div>
+
+    {/* Mobile filters */}
+    <div className="md:hidden border-t">
+      <div className="max-w-6xl mx-auto px-4 py-3 grid grid-cols-2 gap-2">
+        <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search products" className="col-span-2" />
+        <Select value={category} onValueChange={(v) => setCategory(v as Category)}>
+          <SelectTrigger><SelectValue placeholder="Category" /></SelectTrigger>
+          <SelectContent>
+            {CATEGORIES.map((c) => (<SelectItem key={c} value={c}>{c}</SelectItem>))}
+          </SelectContent>
+        </Select>
+        <Select value={sort} onValueChange={(v) => setSort(v as any)}>
+          <SelectTrigger><SelectValue placeholder="Sort" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="popular">Featured</SelectItem>
+            <SelectItem value="price-asc">Price: Low to High</SelectItem>
+            <SelectItem value="price-desc">Price: High to Low</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  </header>
+
+  {/* Hero */}
+  <section className="max-w-6xl mx-auto px-4 py-10">
+    <div className="bg-slate-100 rounded-2xl p-6 md:p-10 flex flex-col md:flex-row items-center gap-6">
+      <div className="flex-1">
+        <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">Everything you love, delivered fast.</h1>
+        <p className="mt-2 text-slate-600">Discover curated electronics, cozy apparel, and home must‑haves. Secure checkout with a slick cart experience.</p>
+        <div className="mt-4 flex items-center gap-2 text-sm text-slate-600">
+          <Badge variant="secondary">Free shipping over {formatINR(5000)}</Badge>
+          <Badge variant="secondary">Easy returns</Badge>
+          <Badge variant="secondary">GST invoice</Badge>
+        </div>
+      </div>
+      <img src="https://images.unsplash.com/photo-1512436991641-6745cdb1723f?q=80&w=1200&auto=format&fit=crop" className="w-full md:w-80 rounded-2xl shadow"/>
+    </div>
+  </section>
+
+  {/* Catalog */}
+  <main className="max-w-6xl mx-auto px-4 pb-24">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      {catalog.map((p) => (
+        <Card key={p.id} className="overflow-hidden hover:shadow-md transition-shadow">
+          <img src={p.image} alt={p.name} className="h-48 w-full object-cover" />
+          <CardHeader className="pb-2">
+            <div className="flex items-start justify-between gap-2">
+              <CardTitle className="text-lg leading-tight">{p.name}</CardTitle>
+              <Badge>{p.category}</Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-slate-600 line-clamp-2">{p.description}</p>
+            <div className="flex items-center justify-between">
+              <div className="font-semibold">{formatINR(p.price)}</div>
+              <div className="text-xs text-slate-500">⭐ {p.rating.toFixed(1)}</div>
+            </div>
+            <Button className="w-full" onClick={() => addToCart(p)}>Add to Cart</Button>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  </main>
+
+  {/* Order confirmation (printable) */}
+  {order && (
+    <div className="fixed inset-0 z-40 bg-black/50 flex items-start justify-center p-4">
+      <div className="bg-white rounded-2xl w-full max-w-xl p-6 shadow-2xl">
+        <div className="flex items-center gap-2 text-green-600 mb-2"><CheckCircle2 className="h-6 w-6"/><h3 className="text-xl font-bold">Order Confirmed</h3></div>
+        <p className="text-sm text-slate-600 mb-4">Thanks {order.name}! A receipt has been emailed to <span className="font-medium">{order.email}</span>.</p>
+        <div className="border rounded-xl p-4 space-y-2">
+          <div className="flex justify-between text-sm"><span>Order ID</span><span className="font-mono">{order.orderId}</span></div>
+          <div className="flex justify-between text-sm"><span>Transaction</span><span className="font-mono">{order.txnId}</span></div>
+          <div className="flex justify-between text-sm"><span>Ship to</span><span className="text-right max-w-[60%]">{order.address}</span></div>
+          <Separator className="my-2" />
+          <div className="space-y-1 text-sm">
+            {order.items.map(({ product, qty }) => (
+              <div key={product.id} className="flex justify-between"><span>{product.name} × {qty}</span><span>{formatINR(product.price * qty)}</span></div>
+            ))}
+          </div>
+          <Separator className="my-2" />
+          <div className="flex justify-between font-semibold"><span>Total Paid</span><span>{formatINR(order.amount)}</span></div>
+        </div>
+        <div className="mt-4 flex gap-2 justify-end">
+          <Button variant="outline" onClick={() => setOrder(null)}>Close</Button>
+          <Button onClick={printReceipt}>Print Receipt</Button>
+        </div>
+      </div>
+    </div>
+  )}
+
+  {/* Footer */}
+  <footer className="border-t py-10 text-center text-sm text-slate-500">
+    <div className="max-w-6xl mx-auto px-4">
+      <p>© {new Date().getFullYear()} ShopSwift — Demo store for catalog, cart & check
