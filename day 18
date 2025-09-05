@@ -1,0 +1,207 @@
+import React, { useState } from "react";
+import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
+
+const initialData = {
+  tasks: {
+    "task-1": { id: "task-1", content: "Learn React" },
+    "task-2": { id: "task-2", content: "Build Trello Clone" },
+    "task-3": { id: "task-3", content: "Practice DnD" },
+    "task-4": { id: "task-4", content: "Deploy Project" },
+  },
+  columns: {
+    "column-1": {
+      id: "column-1",
+      title: "To Do",
+      taskIds: ["task-1", "task-2", "task-3", "task-4"],
+    },
+    "column-2": {
+      id: "column-2",
+      title: "In Progress",
+      taskIds: [],
+    },
+    "column-3": {
+      id: "column-3",
+      title: "Done",
+      taskIds: [],
+    },
+  },
+  columnOrder: ["column-1", "column-2", "column-3"],
+};
+
+export default function App() {
+  const [data, setData] = useState(initialData);
+
+  const onDragEnd = (result) => {
+    const { destination, source, draggableId } = result;
+
+    if (!destination) return; // dropped outside list
+    if (
+      destination.droppableId === source.droppableId &&
+      destination.index === source.index
+    ) {
+      return; // dropped in same place
+    }
+
+    const startCol = data.columns[source.droppableId];
+    const endCol = data.columns[destination.droppableId];
+
+    // Moving inside same column
+    if (startCol === endCol) {
+      const newTaskIds = Array.from(startCol.taskIds);
+      newTaskIds.splice(source.index, 1);
+      newTaskIds.splice(destination.index, 0, draggableId);
+
+      const newCol = { ...startCol, taskIds: newTaskIds };
+      const newState = {
+        ...data,
+        columns: { ...data.columns, [newCol.id]: newCol },
+      };
+      setData(newState);
+      return;
+    }
+
+    // Moving to different column
+    const startTaskIds = Array.from(startCol.taskIds);
+    startTaskIds.splice(source.index, 1);
+    const newStart = { ...startCol, taskIds: startTaskIds };
+
+    const endTaskIds = Array.from(endCol.taskIds);
+    endTaskIds.splice(destination.index, 0, draggableId);
+    const newEnd = { ...endCol, taskIds: endTaskIds };
+
+    const newState = {
+      ...data,
+      columns: {
+        ...data.columns,
+        [newStart.id]: newStart,
+        [newEnd.id]: newEnd,
+      },
+    };
+    setData(newState);
+  };
+
+  return (
+    <DragDropContext onDragEnd={onDragEnd}>
+      <div className="flex gap-4 p-6">
+        {data.columnOrder.map((colId) => {
+          const column = data.columns[colId];
+          const tasks = column.taskIds.map((taskId) => data.tasks[taskId]);
+
+          return (
+            <Droppable droppableId={column.id} key={column.id}>
+              {(provided) => (
+                <div
+                  {...provided.droppableProps}
+                  ref={provided.innerRef}
+                  className="bg-gray-100 p-4 rounded-xl w-64 min-h-[300px]"
+                >
+                  <h2 className="font-bold mb-3">{column.title}</h2>
+                  {tasks.map((task, index) => (
+                    <Draggable
+                      key={task.id}
+                      draggableId={task.id}
+                      index={index}
+                    >
+                      {(provided) => (
+                        <div
+                          {...provided.draggableProps}
+                          {...provided.dragHandleProps}
+                          ref={provided.innerRef}
+                          className="bg-white p-2 mb-2 rounded shadow"
+                        >
+                          {task.content}
+                        </div>
+                      )}
+                    </Draggable>
+                  ))}
+                  {provided.placeholder}
+                </div>
+              )}
+            </Droppable>
+          );
+        })}
+      </div>
+    </DragDropContext>
+  );
+}
+
+
+
+
+import React, { useState } from "react";
+
+const initialTasks = [
+  { id: 1, text: "Setup project", status: "todo" },
+  { id: 2, text: "Design UI", status: "progress" },
+  { id: 3, text: "Create backend", status: "todo" },
+  { id: 4, text: "Deploy app", status: "done" },
+];
+
+export default function ProgressBoard() {
+  const [tasks, setTasks] = useState(initialTasks);
+
+  const updateStatus = (id, newStatus) => {
+    setTasks((prev) =>
+      prev.map((task) =>
+        task.id === id ? { ...task, status: newStatus } : task
+      )
+    );
+  };
+
+  const completed = tasks.filter((t) => t.status === "done").length;
+  const total = tasks.length;
+  const percent = Math.round((completed / total) * 100);
+
+  const renderColumn = (status, title) => (
+    <div className="bg-gray-100 p-4 rounded-xl w-64 min-h-[200px]">
+      <h2 className="font-bold mb-3">{title}</h2>
+      {tasks
+        .filter((task) => task.status === status)
+        .map((task) => (
+          <div
+            key={task.id}
+            className="bg-white p-2 mb-2 rounded shadow flex justify-between items-center"
+          >
+            <span>{task.text}</span>
+            <select
+              value={task.status}
+              onChange={(e) => updateStatus(task.id, e.target.value)}
+              className="border rounded p-1 text-sm"
+            >
+              <option value="todo">To Do</option>
+              <option value="progress">In Progress</option>
+              <option value="done">Done</option>
+            </select>
+          </div>
+        ))}
+    </div>
+  );
+
+  return (
+    <div className="p-6">
+      <h1 className="text-2xl font-bold mb-4">Project Progress</h1>
+
+      {/* Progress Bar */}
+      <div className="mb-6">
+        <div className="w-full bg-gray-300 rounded-full h-4">
+          <div
+            className="bg-green-500 h-4 rounded-full"
+            style={{ width: ${percent}% }}
+          />
+        </div>
+        <p className="mt-2 text-sm">
+          {completed} / {total} tasks completed ({percent}%)
+        </p>
+      </div>
+
+      {/* Columns */}
+      <div className="flex gap-6">
+        {renderColumn("todo", "To Do")}
+        {renderColumn("progress", "In Progress")}
+        {renderColumn("done", "Done")}
+      </div>
+    </div>
+  );
+}
+
+
