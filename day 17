@@ -1,0 +1,112 @@
+const express = require("express");
+const http = require("http");
+const socketIo = require("socket.io");
+const cors = require("cors");
+
+const app = express();
+const server = http.createServer(app);
+const io = socketIo(server, {
+  cors: {
+    origin: "*", // allow all origins (for demo)
+    methods: ["GET", "POST"]
+  }
+});
+
+app.use(cors());
+
+// Store online users
+let onlineUsers = {};
+
+io.on("connection", (socket) => {
+  console.log("🔗 A user connected:", socket.id);
+
+  // When a user joins with username
+  socket.on("join", (username) => {
+    onlineUsers[socket.id] = username;
+    console.log(${username} joined);
+
+    // Broadcast updated users list
+    io.emit("userStatus", onlineUsers);
+  });
+
+  // Handle real-time messages
+  socket.on("chatMessage", (data) => {
+    io.emit("chatMessage", {
+      username: onlineUsers[socket.id],
+      message: data
+    });
+  });
+
+  // When user disconnects
+  socket.on("disconnect", () => {
+    console.log("❌ A user disconnected:", socket.id);
+    delete onlineUsers[socket.id];
+    io.emit("userStatus", onlineUsers);
+  });
+});
+
+const PORT = 3000;
+server.listen(PORT, () => {
+  console.log(🚀 Server running on http://localhost:${PORT});
+});
+
+
+
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Socket.IO Chat</title>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    #chat { border: 1px solid #ccc; padding: 10px; height: 200px; overflow-y: scroll; }
+    #users { margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h2>💬 Real-time Chat</h2>
+  <input id="username" placeholder="Enter your name" />
+  <button onclick="joinChat()">Join</button>
+  <div id="users"><b>Online Users:</b> </div>
+  <div id="chat"></div>
+  <input id="msg" placeholder="Type message..." />
+  <button onclick="sendMessage()">Send</button>
+
+  <script>
+    const socket = io("http://localhost:3000");
+    let username = "";
+
+    function joinChat() {
+      username = document.getElementById("username").value;
+      if (username) {
+        socket.emit("join", username);
+      }
+    }
+
+    function sendMessage() {
+      const msg = document.getElementById("msg").value;
+      if (msg) {
+        socket.emit("chatMessage", msg);
+        document.getElementById("msg").value = "";
+      }
+    }
+
+    // Display messages
+    socket.on("chatMessage", (data) => {
+      const chat = document.getElementById("chat");
+      chat.innerHTML += <p><b>${data.username}:</b> ${data.message}</p>;
+      chat.scrollTop = chat.scrollHeight;
+    });
+
+    // Update online users
+    socket.on("userStatus", (users) => {
+      const userDiv = document.getElementById("users");
+      userDiv.innerHTML = "<b>Online Users:</b> " + Object.values(users).join(", ");
+    });
+  </script>
+</body>
+</html>
